@@ -103,6 +103,7 @@ def solve(a_ptr: int, b_ptr: int, c_ptr: int, M: int, N: int, K: int):
     grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(K, META['BLOCK_SIZE_K']), )
     # Leading dimensions must be multiples of 16-byte strides
     if M % 4 == 0 and N % 4 == 0 and K % 4 == 0:
+        # alloc_fn need use cudaMalloc by ctypes in LeetGPU
         import ctypes
         cudart = ctypes.CDLL("libcudart.so")
         cudart.cudaMalloc.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t]
@@ -115,6 +116,7 @@ def solve(a_ptr: int, b_ptr: int, c_ptr: int, M: int, N: int, K: int):
             if err != 0:
                 raise RuntimeError(f"cudaMalloc failed, code {err}")
             return ptr.value
+
         triton.set_allocator(alloc_fn)
         matmul_kernel_make_tensor_desciptor[grid](
             a_ptr, b_ptr, c_ptr,
