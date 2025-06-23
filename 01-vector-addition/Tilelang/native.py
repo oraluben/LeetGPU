@@ -3,14 +3,12 @@ import tilelang.language as T
 
 import torch
 
-from functools import lru_cache
 
-
-@lru_cache
-def add(M, block_M, dtype="float32", accum_dtype="float"):
+@tilelang.jit
+def add(M, block_M, dtype="float32"):
 
     @T.prim_func
-    def main(
+    def add_kernel(
         A: T.Tensor((M, ), dtype),
         B: T.Tensor((M, ), dtype),
         C: T.Tensor((M, ), dtype),
@@ -21,12 +19,11 @@ def add(M, block_M, dtype="float32", accum_dtype="float"):
                 x = start_x + local_x
                 C[x] = A[x] + B[x]
 
-    return main
+    return add_kernel
 
 
 def solve(a: torch.Tensor, b: torch.Tensor, c: torch.Tensor, N: int):
     BLOCK_SIZE = 128
-    func = add(N, BLOCK_SIZE)
-    jit_kernel = tilelang.compile(func, target="cuda")
+    jit_kernel = add(N, BLOCK_SIZE)
 
     jit_kernel(a, b, c)
