@@ -3,21 +3,19 @@ from cutlass.utils import SmemAllocator
 
 @cute.kernel
 def softmax_log_sum_exp_kernel(input: cute.Tensor, output: cute.Tensor, s_layout: cute.Layout):
-    N = input.shape[0]
     tidx, _, _ = cute.arch.thread_idx()
-    bidx, _, _ = cute.arch.block_idx()
     bdimx, _, _ = cute.arch.block_dim()
-    gdimx, _, _ = cute.arch.grid_dim()
 
     local_max = float('-inf')
     local_sum = 0.0
-    if tidx < N:
-        local_max = input[tidx]
-        local_sum = 1.0
-    for i in range(tidx+bdimx, N, bdimx):
+    for i in range(tidx, input.shape[0], bdimx):
         x = input[i]
         new_max = max(local_max, x)
-        new_sum = cute.exp(local_max - new_max) * local_sum + cute.exp(x - new_max)
+        new_sum = 0.0
+        if local_max == float('-inf'):
+            new_sum = cute.exp(x - new_max)
+        else:
+            new_sum = cute.exp(local_max - new_max) * local_sum + cute.exp(x - new_max)
         local_max = new_max
         local_sum = new_sum
 
@@ -47,14 +45,13 @@ def softmax_log_sum_exp_kernel(input: cute.Tensor, output: cute.Tensor, s_layout
     max_val, sum_exp = smax[0], ssum[0]
     cute.arch.barrier()
 
-    idx = bidx * bdimx + tidx
-    for i in range(idx, N, bdimx * gdimx):
+    for i in range(tidx, input.shape[0], bdimx):
         output[i] = cute.exp(input[i] - max_val) / sum_exp
 
 # input, output are tensors on the GPU
 @cute.jit
 def solve(input: cute.Tensor, output: cute.Tensor, N: cute.Int32):
     block_dim = 1024, 1, 1
-    grid_dim = 148, 1, 1
+    grid_dim = 1, 1, 1
     s_layout = cute.make_layout((1024), stride=(1))
     softmax_log_sum_exp_kernel(input, output, s_layout).launch(grid=grid_dim, block=block_dim)
