@@ -35,12 +35,12 @@ def benchmark(f, n=None, nvtx=None, *args, **kwargs):
     return start.elapsed_time(end)
 
 
-sizes = [128 * 2**p for p in range(0, 8)]
+sizes = [128 * 2**p for p in range(0, 10)]
 sizes = [127, 129] + sizes
 
 tests = {
-    "Triton": lambda a, b, c, size: triton_add(a, b, c, size),
-    "Tilelang": lambda a, b, c, size: tile_add(a, b, c, size),
+    "Triton": triton_add,
+    "Tilelang": tile_add,
     "Torch": lambda a, b, c, size: torch.add(a, b, out=c),
 }
 
@@ -49,9 +49,24 @@ if find_spec("cutlass") is None:
     # CuTeDSL not installed
     pass
 elif version("nvidia-cutlass-dsl") >= "4.3.4":
-    from CuTeDSL.native import compiled_solve as cutedsl_add
+    import cutlass.cute as cute
+    from CuTeDSL.native import solve as cute_kernel
 
-    tests["CuTeDSL"] = lambda a, b, c, size: cutedsl_add(a, b, c, size)
+    def cutedsl_add(
+        a: torch.Tensor, b: torch.Tensor, c: torch.Tensor, n: int, cache={}
+    ):
+        if n not in cache:
+            a_fake = cute.runtime.make_fake_compact_tensor(cute.Float32, (n,))
+            b_fake = cute.runtime.make_fake_compact_tensor(cute.Float32, (n,))
+            c_fake = cute.runtime.make_fake_compact_tensor(cute.Float32, (n,))
+
+            cache[n] = cute.compile(
+                cute_kernel, a_fake, b_fake, c_fake, n, options="--enable-tvm-ffi"
+            )
+
+        cache[n](a, b, c, n)
+
+    tests["CuTeDSL"] = cutedsl_add
 else:
     tests["Tilelang (CuTeDSL)"] = lambda a, b, c, size: tile_cutedsl_add(a, b, c, size)
 
