@@ -1,3 +1,7 @@
 torch
 triton
 tilelang
+
+seaborn
+pandas
+matplotlib
