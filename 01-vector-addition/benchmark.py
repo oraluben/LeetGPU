@@ -1,9 +1,11 @@
 import torch
 
-# from CuTeDSL.native import solve as cutedsl_add
 from Triton.native import solve as triton_add
 from Tilelang.native import solve as tile_add
 from Tilelang.cutedsl import solve as tile_cutedsl_add
+
+from importlib.metadata import version
+from importlib.util import find_spec
 
 
 def benchmark(f, n=None, nvtx=None, *args, **kwargs):
@@ -40,8 +42,18 @@ tests = {
     "Triton": lambda a, b, c, size: triton_add(a, b, c, size),
     "Tilelang": lambda a, b, c, size: tile_add(a, b, c, size),
     "Torch": lambda a, b, c, size: torch.add(a, b, out=c),
-    "Tilelang (CuTeDSL)": lambda a, b, c, size: tile_cutedsl_add(a, b, c, size),
 }
+
+
+if find_spec("cutlass") is None:
+    # CuTeDSL not installed
+    pass
+elif version("nvidia-cutlass-dsl") >= "4.3.4":
+    from CuTeDSL.native import compiled_solve as cutedsl_add
+
+    tests["CuTeDSL"] = lambda a, b, c, size: cutedsl_add(a, b, c, size)
+else:
+    tests["Tilelang (CuTeDSL)"] = lambda a, b, c, size: tile_cutedsl_add(a, b, c, size)
 
 
 results = {}
