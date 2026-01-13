@@ -6,18 +6,17 @@ import torch
 
 @tilelang.jit
 def add(M, block_M, dtype="float32"):
-
     @T.prim_func
     def add_kernel(
         A: T.Tensor((M, ), dtype),
         B: T.Tensor((M, ), dtype),
         C: T.Tensor((M, ), dtype),
     ):
-        with T.Kernel(T.ceildiv(M, block_M), threads=128) as bx:
-            start_x = bx * block_M
-            for local_x in T.Parallel(block_M):
-                x = start_x + local_x
-                C[x] = A[x] + B[x]
+        num_per_thread = 8
+        with T.Kernel(T.ceildiv(M, block_M * num_per_thread), threads=128) as bx:
+            for local_x, i in T.Parallel(block_M, num_per_thread):
+                x = (bx * block_M + local_x) * num_per_thread
+                C[x + i] = A[x + i] + B[x + i]
 
     return add_kernel
 
